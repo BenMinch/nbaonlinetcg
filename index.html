@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NBA Legends TCG</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>NBA Legends TCG</h1>
+        <div class="currency-display">
+            🪙 Coins: <span id="coin-balance">0</span>
+        </div>
+        <nav>
+            <button id="nav-packs">Store (Packs)</button>
+            <button id="nav-roster">My Roster</button>
+            <button id="nav-play">Play Game</button>
+        </nav>
+    </header>
+
+    <main>
+        <section id="view-packs" class="view active">
+            <h2>Get New Players</h2>
+            <p>1 Pack = 15 Cards (Cost: 100 🪙)</p>
+            <button id="open-pack-btn" class="action-btn">Tear Open Pack (100 🪙)</button>
+            <div id="new-cards-display" class="card-grid"></div>
+        </section>
+
+        <section id="view-roster" class="view" style="display: none;">
+            <h2>Your Starting Five</h2>
+            <p>Select 5 players from your collection to take to the court.</p>
+            <ul id="starting-five-list" class="roster-list"></ul>
+            
+            <h3>Your Collection (<span id="collection-count">0</span> Cards)</h3>
+            <div id="collection-grid" class="card-grid"></div>
+        </section>
+
+        <section id="view-play" class="view" style="display: none;">
+            <h2>Simulate Match</h2>
+            <p>Winning earns coins to buy more packs!</p>
+            
+            <div class="difficulty-buttons">
+                <button class="sim-cpu-btn" data-diff="easy">Play Easy CPU (Win: 100 🪙)</button>
+                <button class="sim-cpu-btn" data-diff="medium">Play Medium CPU (Win: 200 🪙)</button>
+                <button class="sim-cpu-btn" data-diff="hard">Play Hard CPU (Win: 300 🪙)</button>
+                <button class="sim-cpu-btn" data-diff="pro">Play Pro CPU (Win: 500 🪙)</button>
+                <hr>
+                <button id="sim-pvp-btn">Play Async PvP (Win: 500 🪙)</button>
+            </div>
+
+            <div id="game-results"></div>
+        </section>
+    </main>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
