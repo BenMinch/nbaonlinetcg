@@ -22,7 +22,7 @@
     <main>
         <section id="view-packs" class="view active">
             <h2>Get New Players</h2>
-            <p>1 Pack = 15 Cards (Cost: 100 🪙)</p>
+            <p>1 Pack = 7 Cards (Cost: 100 )</p>
             <button id="open-pack-btn" class="action-btn">Tear Open Pack (100 🪙)</button>
             <div id="new-cards-display" class="card-grid"></div>
         </section>
@@ -30,7 +30,8 @@
         <section id="view-roster" class="view" style="display: none;">
             <h2>Your Starting Five</h2>
             <p>Select 5 players from your collection to take to the court.</p>
-            <ul id="starting-five-list" class="roster-list"></ul>
+            <div class="roster-slots" id="starting-five-list">
+                </div>
             
             <h3>Your Collection (<span id="collection-count">0</span> Cards)</h3>
             <div id="collection-grid" class="card-grid"></div>
@@ -50,6 +51,39 @@
             </div>
 
             <div id="game-results"></div>
+        </section>
+
+        <section id="view-live-game" class="view" style="display: none;">
+            <div class="scoreboard">
+                <div class="team-score">
+                    <h3 id="live-t1-name">Your Team</h3>
+                    <div id="live-t1-score" class="score-number">0</div>
+                </div>
+                <div class="game-clock">
+                    <div id="live-time">12:00</div>
+                    <div id="live-quarter">1ST QTR</div>
+                </div>
+                <div class="team-score">
+                    <h3 id="live-t2-name">CPU</h3>
+                    <div id="live-t2-score" class="score-number">0</div>
+                </div>
+            </div>
+
+            <div class="live-box-scores">
+                <div class="box-column">
+                    <h4>Your Roster</h4>
+                    <ul id="live-t1-roster" class="live-roster-list"></ul>
+                </div>
+                <div class="box-column">
+                    <h4>Opponent Roster</h4>
+                    <ul id="live-t2-roster" class="live-roster-list"></ul>
+                </div>
+            </div>
+
+            <div id="post-game-panel" style="display: none; text-align: center; margin-top: 20px;">
+                <h2 id="post-game-message"></h2>
+                <button id="claim-rewards-btn" class="action-btn">Claim Rewards & Exit</button>
+            </div>
         </section>
     </main>
 

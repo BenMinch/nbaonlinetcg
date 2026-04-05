@@ -7,7 +7,7 @@ let collection = JSON.parse(localStorage.getItem('nbaCollection')) || [];
 let roster = JSON.parse(localStorage.getItem('nbaRoster')) || [];
 
 const PACK_COST = 100;
-const CARDS_PER_PACK = 15;
+const CARDS_PER_PACK = 7;
 
 const RARITY_RATES = {
     'C': 50.0,
@@ -47,8 +47,29 @@ function updateUI() {
     document.getElementById('coin-balance').innerText = coins;
     document.getElementById('collection-count').innerText = collection.length;
     
-    const rosterList = document.getElementById('starting-five-list');
-    rosterList.innerHTML = roster.map(p => `<li>${p.player} <span style="font-size: 0.8em; opacity: 0.8;">(${p.Rarity || 'C'})</span></li>`).join('');
+    const rosterContainer = document.getElementById('starting-five-list');
+    const requiredPositions = ['PG', 'SG', 'SF', 'PF', 'C'];
+    
+    // Draw the 5 explicit positional slots
+    rosterContainer.innerHTML = requiredPositions.map(pos => {
+        // Find if we have a player in the roster for this specific position
+        const playerInSlot = roster.find(p => (p.pos || 'SF') === pos);
+        
+        if (playerInSlot) {
+            return `
+                <div class="slot filled">
+                    <span class="pos-label">${pos}</span>
+                    ${playerInSlot.player}<br>
+                    <span style="font-size: 0.8em; opacity: 0.8;">(${playerInSlot.Rarity || 'C'})</span>
+                </div>`;
+        } else {
+            return `
+                <div class="slot empty">
+                    <span class="pos-label">${pos}</span>
+                    <em>Empty</em>
+                </div>`;
+        }
+    }).join('');
 }
 
 // --- NAVIGATION ---
@@ -127,12 +148,24 @@ function renderCollection() {
             PPG: ${p.PPG || 0}`;
         
         div.onclick = () => {
-            if (roster.find(r => r.player === p.player)) {
-                roster = roster.filter(r => r.player !== p.player);
+            const existingPlayerIndex = roster.findIndex(r => r.player === p.player);
+            const cardPosition = p.pos || 'SF'; // Default to SF if the database is missing a position
+
+            if (existingPlayerIndex > -1) {
+                // If they are already in the roster, clicking removes them
+                roster.splice(existingPlayerIndex, 1);
             } else {
-                if (roster.length >= 5) return alert("Roster full! Remove someone first.");
+                // Check if we already have a player at this position
+                const isPositionFilled = roster.some(r => (r.pos || 'SF') === cardPosition);
+                
+                if (isPositionFilled) {
+                    return alert(`You already have a ${cardPosition} in your starting lineup! Remove them first.`);
+                }
+                
+                // Safe to add
                 roster.push(p);
             }
+            
             saveState();
             renderCollection();
         };
@@ -141,18 +174,137 @@ function renderCollection() {
 }
 
 // --- SIMULATION & CPU MATCHMAKING ---
+function getPlayersByRarity(rarity, count) {
+    let pool = db.filter(p => p.Rarity === rarity);
+    if (pool.length === 0) pool = db; // Failsafe just in case you haven't assigned this rarity yet
+    let selection = [];
+    for(let i=0; i<count; i++) {
+        selection.push(pool[Math.floor(Math.random() * pool.length)]);
+    }
+    return selection;
+}
 function getCPUOpponent(difficulty) {
-    let pool;
-    if (difficulty === 'pro') pool = db.slice(0, 30);
-    else if (difficulty === 'hard') pool = db.slice(30, 100);
-    else if (difficulty === 'medium') pool = db.slice(100, 250);
-    else pool = db.slice(250);
+    // New Rarity-based matchmaking rules
+    if (difficulty === 'easy') return getPlayersByRarity('UC', 5);
+    if (difficulty === 'medium') return getPlayersByRarity('SR', 5);
+    if (difficulty === 'hard') {
+        return [...getPlayersByRarity('SSR', 4), ...getPlayersByRarity('LR', 1)];
+    }
+    if (difficulty === 'pro') {
+        return [...getPlayersByRarity('UR', 3), ...getPlayersByRarity('LR', 2)];
+    }
+    return getPlayersByRarity('C', 5); // Fallback
+}
+let pendingReward = 0;
 
-    let cpuTeam = [];
-    for(let i=0; i<5; i++) cpuTeam.push(pool[Math.floor(Math.random() * pool.length)]);
-    return cpuTeam;
+// The 30-second Game Animator
+function animateGame(results, rewardAmount) {
+    // Switch to live game view
+    document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+    document.getElementById('view-live-game').style.display = 'block';
+    
+    // Reset UI
+    document.getElementById('post-game-panel').style.display = 'none';
+    document.getElementById('live-t1-name').innerText = results.team1.name;
+    document.getElementById('live-t2-name').innerText = results.team2.name;
+    
+    // Save reward for the end
+    pendingReward = rewardAmount;
+
+    // Animation variables
+    let ticks = 0;
+    const maxTicks = 300; // 300 ticks * 100ms = 30,000ms (30 seconds)
+    
+    const interval = setInterval(() => {
+        ticks++;
+        
+        // Add a tiny bit of random jitter so the game isn't perfectly tied the whole time
+        let p1 = Math.min(1, (ticks / maxTicks) + (Math.random() * 0.08 - 0.04));
+        let p2 = Math.min(1, (ticks / maxTicks) + (Math.random() * 0.08 - 0.04));
+        
+        // Force exactly 100% completion at the final tick
+        if (ticks >= maxTicks) { p1 = 1; p2 = 1; }
+
+        // Update main scoreboard
+        document.getElementById('live-t1-score').innerText = Math.floor(results.team1.score * p1);
+        document.getElementById('live-t2-score').innerText = Math.floor(results.team2.score * p2);
+
+        // Update Game Clock (48 mins = 2880 seconds)
+        let gameSecondsLeft = Math.max(0, 2880 - Math.floor(2880 * (ticks / maxTicks)));
+        let mins = Math.floor((gameSecondsLeft % 720) / 60);
+        let secs = gameSecondsLeft % 60;
+        document.getElementById('live-time').innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+        
+        // Update Quarter
+        let qtr = 4 - Math.floor(gameSecondsLeft / 720);
+        if (qtr === 5) qtr = 4; // Prevent going to Q5 on the exact last millisecond
+        document.getElementById('live-quarter').innerText = ["1ST QTR", "2ND QTR", "HALF", "3RD QTR", "4TH QTR"][qtr];
+
+        // Helper to render roster box scores
+        const renderLiveRoster = (teamBox, pMultiplier) => {
+            return teamBox.map(p => {
+                let currentPts = Math.floor(p.pts * pMultiplier);
+                // Extract FG makes/attempts by splitting the string "5-10"
+                let fgParts = p.fg.split('-');
+                let currentFGM = Math.floor(parseInt(fgParts[0]) * pMultiplier);
+                let currentFGA = Math.floor(parseInt(fgParts[1]) * pMultiplier);
+                
+                return `<li>
+                    <div><strong>${p.player}</strong> <span style="font-size:0.8rem; color:#888;">(${p.pos})</span></div>
+                    <div style="text-align: right;">
+                        <span class="live-stat-pts">${currentPts} PTS</span><br>
+                        <span style="font-size:0.8rem; color:#666;">FG: ${currentFGM}-${currentFGA}</span>
+                    </div>
+                </li>`;
+            }).join('');
+        };
+
+        // Draw live box scores
+        document.getElementById('live-t1-roster').innerHTML = renderLiveRoster(results.team1.boxScore, p1);
+        document.getElementById('live-t2-roster').innerHTML = renderLiveRoster(results.team2.boxScore, p2);
+
+        // End Game logic
+        if (ticks >= maxTicks) {
+            clearInterval(interval);
+            
+            const msgObj = document.getElementById('post-game-message');
+            if (results.team1.score > results.team2.score) {
+                msgObj.innerText = `YOU WIN! Earned ${pendingReward} 🪙`;
+                msgObj.style.color = "green";
+                coins += pendingReward;
+                saveState();
+            } else {
+                msgObj.innerText = `YOU LOSE! No coins earned.`;
+                msgObj.style.color = "red";
+            }
+            
+            document.getElementById('post-game-panel').style.display = 'block';
+        }
+    }, 100);
 }
 
+// Button Listeners for CPU match
+document.querySelectorAll('.sim-cpu-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        if (roster.length !== 5) return alert("You need exactly 5 players to play!");
+        
+        const difficulty = e.target.getAttribute('data-diff');
+        const cpuTeam = getCPUOpponent(difficulty);
+        const rewards = { 'easy': 100, 'medium': 200, 'hard': 300, 'pro': 500 };
+        
+        // 1. Calculate the math instantly behind the scenes
+        const results = simulateGame("Your Team", roster, `CPU (${difficulty.toUpperCase()})`, cpuTeam);
+        
+        // 2. Play out the theater
+        animateGame(results, rewards[difficulty]);
+    });
+});
+
+// Post-Game Return Button
+document.getElementById('claim-rewards-btn').addEventListener('click', () => {
+    document.getElementById('view-live-game').style.display = 'none';
+    document.getElementById('view-play').style.display = 'block'; // Return to menu
+});
 function processGameResult(results, rewardAmount) {
     let resultHTML = `<h3>FINAL SCORE</h3>
         <p>${results.team1.name}: ${results.team1.score}</p>

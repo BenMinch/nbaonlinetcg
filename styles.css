@@ -198,3 +198,102 @@ pre { font-family: 'Courier New', Courier, monospace; white-space: pre-wrap; bac
     50% { background-position: 100% 50%; }
     100% { filter: hue-rotate(360deg); background-position: 0% 50%; }
 }
+
+/* --- ROSTER SLOTS UI --- */
+.roster-slots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.roster-slots .slot {
+    background: #e0e0e0;
+    color: #666;
+    padding: 10px 15px;
+    border-radius: 8px;
+    flex: 1;
+    min-width: 150px;
+    text-align: center;
+    border: 2px dashed #bbb;
+    font-weight: bold;
+}
+
+.roster-slots .slot.filled {
+    background: var(--primary);
+    color: white;
+    border: 2px solid var(--primary);
+}
+
+.roster-slots .pos-label {
+    display: block;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+}
+
+.roster-slots .empty .pos-label {
+    color: #999;
+}
+
+/* --- LIVE GAME SCOREBOARD --- */
+.scoreboard {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background: #111;
+    color: white;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 30px;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+}
+
+.team-score { text-align: center; flex: 1; }
+.team-score h3 { margin: 0 0 10px 0; color: #aaa; text-transform: uppercase; }
+
+.score-number {
+    font-size: 5rem;
+    font-weight: 900;
+    font-family: 'Courier New', Courier, monospace;
+    color: #f1c40f;
+    text-shadow: 0 0 10px rgba(241,196,15,0.5);
+    line-height: 1;
+}
+
+.game-clock {
+    text-align: center;
+    background: #222;
+    padding: 15px 30px;
+    border-radius: 8px;
+    border: 2px solid #444;
+}
+
+#live-time { font-size: 2.5rem; font-family: 'Courier New', monospace; color: #e74c3c; font-weight: bold; }
+#live-quarter { font-size: 1.2rem; color: #888; font-weight: bold; margin-top: 5px; }
+
+.live-box-scores {
+    display: flex;
+    gap: 20px;
+}
+
+.box-column {
+    flex: 1;
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.live-roster-list { list-style: none; padding: 0; margin: 0; }
+.live-roster-list li {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.live-roster-list li:last-child { border-bottom: none; }
+
+.live-stat-pts { font-weight: bold; font-size: 1.2rem; color: var(--primary); }
