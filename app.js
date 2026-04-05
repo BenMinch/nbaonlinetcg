@@ -2,7 +2,8 @@ import { simulateGame } from './simulator.js';
 
 // --- STATE MANAGEMENT ---
 let db = [];
-let coins = parseInt(localStorage.getItem('nbaCoins')) || 2000; 
+let savedCoins = localStorage.getItem('nbaCoins');
+let coins = savedCoins !== null ? parseInt(savedCoins) : 2000;
 let collection = JSON.parse(localStorage.getItem('nbaCollection')) || [];
 let roster = JSON.parse(localStorage.getItem('nbaRoster')) || [];
 
