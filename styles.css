@@ -296,4 +296,13 @@ pre { font-family: 'Courier New', Courier, monospace; white-space: pre-wrap; bac
 }
 .live-roster-list li:last-child { border-bottom: none; }
 
-.live-stat-pts { font-weight: bold; font-size: 1.2rem; color: var(--primary); }
+.live-stat-pts { font-weight: bold; font-size: 1.2rem; color: var(--secondary); }
+
+/* Live box score — fix dark inline colours from animateGame rendering on white bg */
+.live-roster-list li strong { color: #111; }
+.live-roster-list .live-pts-val {
+    font-size: 1.05rem;
+    font-weight: 900;
+    color: var(--secondary); /* NBA Red — pops on white background */
+}
+.live-roster-list .live-sub-stat { color: #555; }

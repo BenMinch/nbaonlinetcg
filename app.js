@@ -455,16 +455,16 @@ function animateGame(results, rewardAmount) {
                 padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);gap:8px;
             ">
                 <div style="flex:1;min-width:0;">
-                    <strong style="font-size:0.88rem;">${player.player}${formDot}</strong>${fouledNote}
-                    <span style="font-size:0.74rem;color:#888;margin-left:4px;">${player.pos}</span><br>
-                    <span style="font-size:0.74rem;color:#666;">
+                    <strong style="font-size:0.88rem;color:#111;">${player.player}${formDot}</strong>${fouledNote}
+                    <span style="font-size:0.74rem;color:#666;margin-left:4px;">${player.pos}</span><br>
+                    <span style="font-size:0.74rem;color:#555;">
                         FG ${liveFGM}/${liveFGA} &nbsp;|&nbsp; 3P ${live3M}/${live3A}
                     </span>
                 </div>
                 <div style="text-align:right;white-space:nowrap;">
-                    <span style="font-size:1.05rem;font-weight:900;color:#f0f0f0;">${livePts}</span>
-                    <span style="font-size:0.7rem;color:#888;"> PTS</span><br>
-                    <span style="font-size:0.72rem;color:#777;">
+                    <span class="live-pts-val">${livePts}</span>
+                    <span style="font-size:0.7rem;color:#555;"> PTS</span><br>
+                    <span class="live-sub-stat" style="font-size:0.72rem;">
                         ${liveReb}R &nbsp;${liveAst}A &nbsp;${liveTov}TO
                     </span>
                 </div>
