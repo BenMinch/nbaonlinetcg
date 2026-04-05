@@ -199,55 +199,64 @@ let pendingReward = 0;
 
 // The 30-second Game Animator
 function animateGame(results, rewardAmount) {
-    // Switch to live game view
     document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
     document.getElementById('view-live-game').style.display = 'block';
     
-    // Reset UI
     document.getElementById('post-game-panel').style.display = 'none';
     document.getElementById('live-t1-name').innerText = results.team1.name;
     document.getElementById('live-t2-name').innerText = results.team2.name;
     
-    // Save reward for the end
     pendingReward = rewardAmount;
 
-    // Animation variables
     let ticks = 0;
-    const maxTicks = 300; // 300 ticks * 100ms = 30,000ms (30 seconds)
+    const maxTicks = 300; 
+    
+    // Track the currently displayed scores
+    let currentT1Score = 0;
+    let currentT2Score = 0;
     
     const interval = setInterval(() => {
         ticks++;
-        
-        // Add a tiny bit of random jitter so the game isn't perfectly tied the whole time
-        let p1 = Math.min(1, (ticks / maxTicks) + (Math.random() * 0.08 - 0.04));
-        let p2 = Math.min(1, (ticks / maxTicks) + (Math.random() * 0.08 - 0.04));
-        
-        // Force exactly 100% completion at the final tick
-        if (ticks >= maxTicks) { p1 = 1; p2 = 1; }
+        let timePercent = ticks / maxTicks;
 
-        // Update main scoreboard
-        document.getElementById('live-t1-score').innerText = Math.floor(results.team1.score * p1);
-        document.getElementById('live-t2-score').innerText = Math.floor(results.team2.score * p2);
+        // Calculate where the score SHOULD be right now based on time
+        let expectedT1 = Math.floor(results.team1.score * timePercent);
+        let expectedT2 = Math.floor(results.team2.score * timePercent);
 
-        // Update Game Clock (48 mins = 2880 seconds)
-        let gameSecondsLeft = Math.max(0, 2880 - Math.floor(2880 * (ticks / maxTicks)));
+        // Only update if the expected score is at least 1, 2, or 3 points higher 
+        // than the current score (mimicking real basketball shots)
+        if (expectedT1 - currentT1Score >= 2 || (expectedT1 > currentT1Score && Math.random() > 0.8)) {
+            currentT1Score = expectedT1;
+        }
+        if (expectedT2 - currentT2Score >= 2 || (expectedT2 > currentT2Score && Math.random() > 0.8)) {
+            currentT2Score = expectedT2;
+        }
+
+        // Force the final correct score on the very last tick
+        if (ticks >= maxTicks) {
+            currentT1Score = results.team1.score;
+            currentT2Score = results.team2.score;
+        }
+
+        document.getElementById('live-t1-score').innerText = currentT1Score;
+        document.getElementById('live-t2-score').innerText = currentT2Score;
+
+        let gameSecondsLeft = Math.max(0, 2880 - Math.floor(2880 * timePercent));
         let mins = Math.floor((gameSecondsLeft % 720) / 60);
         let secs = gameSecondsLeft % 60;
         document.getElementById('live-time').innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
         
-        // Update Quarter
         let qtr = 4 - Math.floor(gameSecondsLeft / 720);
-        if (qtr === 5) qtr = 4; // Prevent going to Q5 on the exact last millisecond
+        if (qtr === 5) qtr = 4;
         document.getElementById('live-quarter').innerText = ["1ST QTR", "2ND QTR", "HALF", "3RD QTR", "4TH QTR"][qtr];
 
-        // Helper to render roster box scores
-        const renderLiveRoster = (teamBox, pMultiplier) => {
+        const renderLiveRoster = (teamBox) => {
             return teamBox.map(p => {
-                let currentPts = Math.floor(p.pts * pMultiplier);
-                // Extract FG makes/attempts by splitting the string "5-10"
+                // Ensure box score stats only increment upwards smoothly without jitter
+                let currentPts = Math.floor(p.pts * timePercent);
                 let fgParts = p.fg.split('-');
-                let currentFGM = Math.floor(parseInt(fgParts[0]) * pMultiplier);
-                let currentFGA = Math.floor(parseInt(fgParts[1]) * pMultiplier);
+                let currentFGM = Math.floor(parseInt(fgParts[0]) * timePercent);
+                let currentFGA = Math.floor(parseInt(fgParts[1]) * timePercent);
                 
                 return `<li>
                     <div><strong>${p.player}</strong> <span style="font-size:0.8rem; color:#888;">(${p.pos})</span></div>
@@ -259,11 +268,9 @@ function animateGame(results, rewardAmount) {
             }).join('');
         };
 
-        // Draw live box scores
-        document.getElementById('live-t1-roster').innerHTML = renderLiveRoster(results.team1.boxScore, p1);
-        document.getElementById('live-t2-roster').innerHTML = renderLiveRoster(results.team2.boxScore, p2);
+        document.getElementById('live-t1-roster').innerHTML = renderLiveRoster(results.team1.boxScore);
+        document.getElementById('live-t2-roster').innerHTML = renderLiveRoster(results.team2.boxScore);
 
-        // End Game logic
         if (ticks >= maxTicks) {
             clearInterval(interval);
             
