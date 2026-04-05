@@ -30,10 +30,90 @@
         <section id="view-roster" class="view" style="display: none;">
             <h2>Your Starting Five</h2>
             <p>Select 5 players from your collection to take to the court.</p>
-            <div class="roster-slots" id="starting-five-list">
-                </div>
-            
+            <div class="roster-slots" id="starting-five-list"></div>
+
             <h3>Your Collection (<span id="collection-count">0</span> Cards)</h3>
+
+            <!-- SEARCH & FILTER BAR -->
+            <div class="collection-toolbar">
+                <div class="search-wrap">
+                    <span class="search-icon">🔍</span>
+                    <input id="collection-search" type="text" placeholder="Search by player name…" autocomplete="off" />
+                    <button id="collection-search-clear" title="Clear search">✕</button>
+                </div>
+
+                <div class="filter-row">
+                    <!-- Position -->
+                    <div class="filter-group">
+                        <label>Position</label>
+                        <div class="filter-chips" id="filter-pos">
+                            <button class="chip active" data-pos="ALL">All</button>
+                            <button class="chip" data-pos="PG">PG</button>
+                            <button class="chip" data-pos="SG">SG</button>
+                            <button class="chip" data-pos="SF">SF</button>
+                            <button class="chip" data-pos="PF">PF</button>
+                            <button class="chip" data-pos="C">C</button>
+                        </div>
+                    </div>
+
+                    <!-- Rarity -->
+                    <div class="filter-group">
+                        <label>Rarity</label>
+                        <div class="filter-chips" id="filter-rarity">
+                            <button class="chip active" data-rarity="ALL">All</button>
+                            <button class="chip" data-rarity="LR">LR</button>
+                            <button class="chip" data-rarity="UR">UR</button>
+                            <button class="chip" data-rarity="SSR">SSR</button>
+                            <button class="chip" data-rarity="SR">SR</button>
+                            <button class="chip" data-rarity="R">R</button>
+                            <button class="chip" data-rarity="UC">UC</button>
+                            <button class="chip" data-rarity="C">C</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stat range sliders -->
+                <div class="filter-sliders">
+                    <div class="slider-group">
+                        <label>PPG ≥ <span id="lbl-ppg">0</span></label>
+                        <input type="range" id="filter-ppg" min="0" max="40" step="1" value="0" />
+                    </div>
+                    <div class="slider-group">
+                        <label>3P% ≥ <span id="lbl-3p">0</span>%</label>
+                        <input type="range" id="filter-3p" min="0" max="55" step="1" value="0" />
+                    </div>
+                    <div class="slider-group">
+                        <label>2P% ≥ <span id="lbl-2p">0</span>%</label>
+                        <input type="range" id="filter-2p" min="0" max="75" step="1" value="0" />
+                    </div>
+                    <div class="slider-group">
+                        <label>REB ≥ <span id="lbl-reb">0</span></label>
+                        <input type="range" id="filter-reb" min="0" max="20" step="0.5" value="0" />
+                    </div>
+                    <div class="slider-group">
+                        <label>BLK ≥ <span id="lbl-blk">0</span></label>
+                        <input type="range" id="filter-blk" min="0" max="5" step="0.1" value="0" />
+                    </div>
+                    <div class="slider-group">
+                        <label>STL ≥ <span id="lbl-stl">0</span></label>
+                        <input type="range" id="filter-stl" min="0" max="4" step="0.1" value="0" />
+                    </div>
+                    <div class="slider-group">
+                        <label>TOV ≤ <span id="lbl-tov">10</span></label>
+                        <input type="range" id="filter-tov" min="0" max="10" step="0.1" value="10" />
+                    </div>
+                    <div class="slider-group">
+                        <label>FT% ≥ <span id="lbl-ft">0</span>%</label>
+                        <input type="range" id="filter-ft" min="0" max="100" step="1" value="0" />
+                    </div>
+                </div>
+
+                <div class="filter-footer">
+                    <span id="collection-filter-count" style="color:#888;font-size:0.85rem;"></span>
+                    <button id="filter-reset-btn">Reset All Filters</button>
+                </div>
+            </div>
+
             <div id="collection-grid" class="card-grid"></div>
         </section>
 

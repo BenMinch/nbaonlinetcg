@@ -432,3 +432,167 @@ pre { font-family: 'Courier New', Courier, monospace; white-space: pre-wrap; bac
     font-weight: 600;
     white-space: nowrap;
 }
+
+/* =============================================================================
+   COLLECTION SEARCH & FILTER TOOLBAR
+   ============================================================================= */
+
+.collection-toolbar {
+    background: white;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* Search bar */
+.search-wrap {
+    display: flex;
+    align-items: center;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+.search-wrap:focus-within { border-color: var(--primary); }
+
+.search-icon {
+    padding: 0 10px;
+    font-size: 1rem;
+    color: #aaa;
+    user-select: none;
+}
+
+#collection-search {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 0.95rem;
+    padding: 10px 4px;
+    background: transparent;
+}
+
+#collection-search-clear {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #aaa;
+    padding: 0 12px;
+    transition: color 0.15s;
+}
+#collection-search-clear:hover { color: var(--secondary); }
+
+/* Filter row (pos + rarity chips) */
+.filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.filter-group label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #888;
+}
+
+.filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.chip {
+    background: #f0f0f0;
+    border: 2px solid transparent;
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    color: #555;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.chip:hover { background: #e0e0e0; }
+.chip.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+/* Stat sliders */
+.filter-sliders {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px 20px;
+}
+
+.slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.slider-group label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #555;
+}
+
+.slider-group input[type="range"] {
+    width: 100%;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+/* Footer: count + reset */
+.filter-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 4px;
+    border-top: 1px solid #eee;
+}
+
+#filter-reset-btn {
+    background: none;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    padding: 5px 14px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #666;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+}
+#filter-reset-btn:hover {
+    border-color: var(--secondary);
+    color: var(--secondary);
+}
+
+/* Card face enhancements */
+.card-ppg {
+    font-weight: 800;
+    font-size: 1rem;
+    color: var(--primary);
+    display: block;
+    margin: 3px 0 2px;
+}
+
+.card-stats {
+    font-size: 0.67rem;
+    color: #888;
+    line-height: 1.5;
+    display: block;
+}

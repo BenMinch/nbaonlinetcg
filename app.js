@@ -149,27 +149,86 @@ document.getElementById('open-pack-btn').addEventListener('click', () => {
     renderCollection();
 });
 
-// --- ROSTER BUILDER ---
+// --- ROSTER BUILDER & COLLECTION FILTERS ---
+
+// Active filter state — single source of truth
+const filters = {
+    search:  '',
+    pos:     'ALL',
+    rarity:  'ALL',
+    ppg:     0,
+    threeP:  0,     // 3P% minimum (0–55)
+    twoP:    0,     // 2P% minimum (0–75)
+    reb:     0,
+    blk:     0,
+    stl:     0,
+    tov:     10,    // TOV maximum (inverted slider)
+    ft:      0,
+};
+
+// Apply all active filters to the collection and return a sorted subset
+function getFilteredCollection() {
+    const rarityOrder = { 'LR': 7, 'UR': 6, 'SSR': 5, 'SR': 4, 'R': 3, 'UC': 2, 'C': 1 };
+    const q = filters.search.toLowerCase();
+
+    return [...collection]
+        .filter(p => {
+            if (q && !p.player.toLowerCase().includes(q)) return false;
+            if (filters.pos    !== 'ALL' && (p.pos || 'SF') !== filters.pos)       return false;
+            if (filters.rarity !== 'ALL' && (p.Rarity || 'C') !== filters.rarity)  return false;
+            if (parseFloat(p.PPG         || 0) < filters.ppg)    return false;
+            if (parseFloat(p.x3p_percent || 0) * 100 < filters.threeP) return false;
+            if (parseFloat(p.x2p_percent || 0) * 100 < filters.twoP)   return false;
+            if (parseFloat(p.REB_per_game || p.TRB || 0) < filters.reb) return false;
+            if (parseFloat(p.BLK_per_game || 0) < filters.blk)  return false;
+            if (parseFloat(p.STL_per_game || 0) < filters.stl)  return false;
+            if (parseFloat(p.TOV_per_game || 0) > filters.tov)  return false;
+            if (parseFloat(p.ft_percent   || 0) * 100 < filters.ft) return false;
+            return true;
+        })
+        .sort((a, b) => (rarityOrder[b.Rarity||'C'] || 0) - (rarityOrder[a.Rarity||'C'] || 0));
+}
+
 function renderCollection() {
     const grid = document.getElementById('collection-grid');
     grid.innerHTML = '';
 
-    // collection is guaranteed unique at the source (pullCard enforces this),
-    // so no deduplication needed here — just sort and render.
-    const rarityOrder = { 'LR': 7, 'UR': 6, 'SSR': 5, 'SR': 4, 'R': 3, 'UC': 2, 'C': 1 };
-    const sorted = [...collection].sort((a, b) => (rarityOrder[b.Rarity||'C'] || 0) - (rarityOrder[a.Rarity||'C'] || 0));
+    const visible = getFilteredCollection();
 
-    sorted.forEach(p => {
+    // Update result count label
+    const countEl = document.getElementById('collection-filter-count');
+    if (countEl) {
+        countEl.innerText = visible.length === collection.length
+            ? `${collection.length} cards`
+            : `${visible.length} of ${collection.length} cards`;
+    }
+
+    if (visible.length === 0) {
+        grid.innerHTML = '<p style="color:#999;grid-column:1/-1;text-align:center;padding:2rem;">No cards match your filters.</p>';
+        return;
+    }
+
+    visible.forEach(p => {
         const div = document.createElement('div');
         const safeRarity = p.Rarity || 'C';
-        
-        div.className = `card rarity-${safeRarity} ${roster.find(r => r.player === p.player) ? 'selected' : ''}`;
+        const inRoster   = roster.find(r => r.player === p.player);
+
+        // Build a compact stat line for the card face
+        const pct3  = p.x3p_percent ? (parseFloat(p.x3p_percent) * 100).toFixed(0) + '% 3P' : null;
+        const pct2  = p.x2p_percent ? (parseFloat(p.x2p_percent) * 100).toFixed(0) + '% 2P' : null;
+        const reb   = p.REB_per_game || p.TRB ? parseFloat(p.REB_per_game || p.TRB).toFixed(1) + ' REB' : null;
+        const blk   = p.BLK_per_game ? parseFloat(p.BLK_per_game).toFixed(1) + ' BLK' : null;
+        const stl   = p.STL_per_game ? parseFloat(p.STL_per_game).toFixed(1) + ' STL' : null;
+        const statLine = [pct3, pct2, reb, blk, stl].filter(Boolean).join(' · ');
+
+        div.className = `card rarity-${safeRarity} ${inRoster ? 'selected' : ''}`;
         div.innerHTML = `
             <span class="rarity-badge badge-${safeRarity}">${safeRarity}</span><br>
             <strong>${p.player}</strong><br>
-            ${p.pos || 'SF'}<br>
-            PPG: ${p.PPG || 0}`;
-        
+            <span style="font-size:0.8rem;color:#666;">${p.pos || 'SF'}</span><br>
+            <span class="card-ppg">${parseFloat(p.PPG || 0).toFixed(1)} PPG</span><br>
+            <span class="card-stats">${statLine}</span>`;
+
         div.onclick = () => {
             const existingPlayerIndex = roster.findIndex(r => r.player === p.player);
             const cardPosition = p.pos || 'SF';
@@ -178,20 +237,92 @@ function renderCollection() {
                 roster.splice(existingPlayerIndex, 1);
             } else {
                 const isPositionFilled = roster.some(r => (r.pos || 'SF') === cardPosition);
-                
                 if (isPositionFilled) {
                     return alert(`You already have a ${cardPosition} in your starting lineup! Remove them first.`);
                 }
-                
                 roster.push(p);
             }
-            
+
             saveState();
             renderCollection();
         };
         grid.appendChild(div);
     });
 }
+
+// ── FILTER EVENT WIRING ───────────────────────────────────────────────────────
+
+// Search input
+document.getElementById('collection-search').addEventListener('input', e => {
+    filters.search = e.target.value;
+    renderCollection();
+});
+document.getElementById('collection-search-clear').addEventListener('click', () => {
+    filters.search = '';
+    document.getElementById('collection-search').value = '';
+    renderCollection();
+});
+
+// Position chips
+document.getElementById('filter-pos').addEventListener('click', e => {
+    const chip = e.target.closest('[data-pos]');
+    if (!chip) return;
+    document.querySelectorAll('#filter-pos .chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    filters.pos = chip.dataset.pos;
+    renderCollection();
+});
+
+// Rarity chips
+document.getElementById('filter-rarity').addEventListener('click', e => {
+    const chip = e.target.closest('[data-rarity]');
+    if (!chip) return;
+    document.querySelectorAll('#filter-rarity .chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    filters.rarity = chip.dataset.rarity;
+    renderCollection();
+});
+
+// Stat sliders
+const sliderDefs = [
+    { id: 'filter-ppg', lbl: 'lbl-ppg', key: 'ppg',    fmt: v => v          },
+    { id: 'filter-3p',  lbl: 'lbl-3p',  key: 'threeP', fmt: v => v + '%'    },
+    { id: 'filter-2p',  lbl: 'lbl-2p',  key: 'twoP',   fmt: v => v + '%'    },
+    { id: 'filter-reb', lbl: 'lbl-reb', key: 'reb',     fmt: v => v          },
+    { id: 'filter-blk', lbl: 'lbl-blk', key: 'blk',     fmt: v => v          },
+    { id: 'filter-stl', lbl: 'lbl-stl', key: 'stl',     fmt: v => v          },
+    { id: 'filter-tov', lbl: 'lbl-tov', key: 'tov',     fmt: v => v          },
+    { id: 'filter-ft',  lbl: 'lbl-ft',  key: 'ft',      fmt: v => v + '%'    },
+];
+
+sliderDefs.forEach(({ id, lbl, key, fmt }) => {
+    const input = document.getElementById(id);
+    const label = document.getElementById(lbl);
+    input.addEventListener('input', () => {
+        filters[key] = parseFloat(input.value);
+        label.innerText = fmt(input.value);
+        renderCollection();
+    });
+});
+
+// Reset all filters
+document.getElementById('filter-reset-btn').addEventListener('click', () => {
+    filters.search = ''; filters.pos = 'ALL'; filters.rarity = 'ALL';
+    filters.ppg = 0; filters.threeP = 0; filters.twoP = 0;
+    filters.reb = 0; filters.blk = 0; filters.stl = 0;
+    filters.tov = 10; filters.ft = 0;
+
+    document.getElementById('collection-search').value = '';
+    sliderDefs.forEach(({ id, lbl, fmt }) => {
+        const input = document.getElementById(id);
+        input.value = input.id === 'filter-tov' ? 10 : 0;
+        document.getElementById(lbl).innerText = fmt(input.value);
+    });
+    document.querySelectorAll('#filter-pos .chip, #filter-rarity .chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.pos === 'ALL' || c.dataset.rarity === 'ALL');
+    });
+    renderCollection();
+});
 
 // --- SIMULATION & CPU MATCHMAKING ---
 function getPlayersByRarity(rarity, count) {
