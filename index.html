@@ -28,7 +28,10 @@
         </section>
 
         <section id="view-roster" class="view" style="display: none;">
-            <h2>Your Starting Five</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h2 style="margin: 0;">Your Starting Five</h2>
+                <button id="clear-roster-btn" class="action-btn" style="background: #7f8c8d; padding: 6px 12px; font-size: 0.85rem;">🗑️ Clear Lineup</button>
+            </div>
             <p>Select 5 players from your collection to take to the court.</p>
             <div class="roster-slots" id="starting-five-list"></div>
 

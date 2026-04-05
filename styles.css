@@ -223,6 +223,13 @@ pre { font-family: 'Courier New', Courier, monospace; white-space: pre-wrap; bac
     background: var(--primary);
     color: white;
     border: 2px solid var(--primary);
+    cursor: pointer; /* ADDED */
+    transition: background 0.2s, transform 0.1s, border-color 0.2s; /* ADDED */
+}
+.roster-slots .slot.filled:hover {
+    background: var(--secondary);
+    border-color: var(--secondary);
+    transform: scale(0.95);
 }
 
 .roster-slots .pos-label {

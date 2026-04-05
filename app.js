@@ -55,7 +55,7 @@ function updateUI() {
         
         if (playerInSlot) {
             return `
-                <div class="slot filled">
+                <div class="slot filled" data-pos="${pos}" title="Click to remove">
                     <span class="pos-label">${pos}</span>
                     ${playerInSlot.player}<br>
                     <span style="font-size: 0.8em; opacity: 0.8;">(${playerInSlot.Rarity || 'C'})</span>
@@ -150,7 +150,29 @@ document.getElementById('open-pack-btn').addEventListener('click', () => {
 });
 
 // --- ROSTER BUILDER & COLLECTION FILTERS ---
+document.getElementById('starting-five-list').addEventListener('click', (e) => {
+    // Find if the user clicked inside a filled slot
+    const filledSlot = e.target.closest('.slot.filled');
+    if (!filledSlot) return; // If they clicked an empty slot or background, do nothing
+    
+    // Grab the position they clicked, filter them out of the roster, and save
+    const posToRemove = filledSlot.getAttribute('data-pos');
+    roster = roster.filter(p => (p.pos || 'SF') !== posToRemove);
+    
+    saveState();
+    renderCollection(); // Re-render the grid so the green "IN ROSTER" highlight disappears
+});
 
+// 2. Clear the entire roster at once
+document.getElementById('clear-roster-btn').addEventListener('click', () => {
+    if (roster.length === 0) return; // Already empty
+    
+    if (confirm("Are you sure you want to clear your entire starting lineup?")) {
+        roster = [];
+        saveState();
+        renderCollection();
+    }
+});
 // Active filter state — single source of truth
 const filters = {
     search:  '',
