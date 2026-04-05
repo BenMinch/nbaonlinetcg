@@ -306,3 +306,129 @@ pre { font-family: 'Courier New', Courier, monospace; white-space: pre-wrap; bac
     color: var(--secondary); /* NBA Red — pops on white background */
 }
 .live-roster-list .live-sub-stat { color: #555; }
+
+/* =============================================================================
+   ASYNC PVP LOBBY
+   ============================================================================= */
+
+.pvp-section {
+    margin-top: 2rem;
+    border-top: 2px solid #ddd;
+    padding-top: 1.5rem;
+}
+
+.pvp-section h2 {
+    margin-bottom: 0.25rem;
+}
+
+.pvp-submit-panel,
+.pvp-pool-panel {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+.pvp-submit-panel h3,
+.pvp-pool-panel h3 {
+    margin: 0 0 8px 0;
+    color: var(--primary);
+}
+
+.pvp-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-top: 12px;
+}
+
+.pvp-form input {
+    flex: 1;
+    min-width: 160px;
+    padding: 10px 14px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    transition: border-color 0.2s;
+}
+
+.pvp-form input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+/* Team cards in the lobby */
+#pvp-lobby {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 480px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.pvp-team-card {
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+    background: #fafafa;
+}
+
+.pvp-team-card:hover {
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(29,66,138,0.12);
+    transform: translateY(-1px);
+}
+
+.pvp-team-card.pvp-selected {
+    border-color: var(--secondary);
+    background: #fff5f5;
+    box-shadow: 0 0 0 3px rgba(200,16,46,0.15);
+}
+
+.pvp-team-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.pvp-team-name {
+    font-size: 1.05rem;
+    color: #111;
+}
+
+.pvp-owner {
+    font-size: 0.8rem;
+    color: #888;
+    margin-left: auto;
+}
+
+.pvp-team-meta {
+    display: flex;
+    gap: 16px;
+    font-size: 0.8rem;
+    color: #666;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.pvp-team-players {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-player-chip {
+    background: var(--primary);
+    color: white;
+    font-size: 0.72rem;
+    padding: 3px 9px;
+    border-radius: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}

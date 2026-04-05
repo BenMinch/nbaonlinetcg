@@ -612,17 +612,142 @@ function processGameResult(results, rewardAmount) {
     document.getElementById('game-results').innerHTML = resultHTML;
 }
 
-// --- PVP MATCHMAKING (Mock) ---
-document.getElementById('sim-pvp-btn').addEventListener('click', () => {
-    if (roster.length !== 5) return alert("You need exactly 5 players to play PvP!");
-    
-    let mockOpponentTeam = [];
-    for(let i=0; i<5; i++) mockOpponentTeam.push(db[Math.floor(Math.random() * 80)]);
-    
-    const results = simulateGame("Your Team", roster, "Rival Player", mockOpponentTeam);
+// =============================================================================
+// REAL ASYNC PVP — Supabase-backed shared team pool
+// =============================================================================
+import { fetchPvpTeams, submitPvpTeam, recordPvpResult } from './pvp.js';
 
-    // PvP uses the full animated scoreboard too
+// Track the currently selected opponent team from the pool
+let selectedPvpOpponent = null;
+
+// ── RENDER THE PVP LOBBY ─────────────────────────────────────────────────────
+async function renderPvpLobby() {
+    const container = document.getElementById('pvp-lobby');
+    if (!container) return;
+
+    container.innerHTML = '<p style="color:#888;font-style:italic;">Loading teams...</p>';
+
+    let teams;
+    try {
+        teams = await fetchPvpTeams();
+    } catch (err) {
+        container.innerHTML = `<p style="color:red;">Could not load PvP teams. Check your Supabase config in pvp.js.<br><small>${err.message}</small></p>`;
+        return;
+    }
+
+    if (teams.length === 0) {
+        container.innerHTML = '<p style="color:#888;">No teams submitted yet. Be the first!</p>';
+        return;
+    }
+
+    const rarityOrder = { 'LR': 7, 'UR': 6, 'SSR': 5, 'SR': 4, 'R': 3, 'UC': 2, 'C': 1 };
+
+    container.innerHTML = teams.map(team => {
+        const players = team.players || [];
+        // Best rarity on the team for the badge
+        const topRarity = players.reduce((best, p) => {
+            return (rarityOrder[p.Rarity] || 0) > (rarityOrder[best] || 0) ? p.Rarity : best;
+        }, 'C');
+        const avgPpg = players.length
+            ? (players.reduce((s, p) => s + parseFloat(p.PPG || 0), 0) / players.length).toFixed(1)
+            : '0.0';
+        const submitted = new Date(team.submitted_at).toLocaleDateString();
+        const record = `${team.wins || 0}W - ${team.losses || 0}L`;
+
+        return `<div class="pvp-team-card ${selectedPvpOpponent?.id === team.id ? 'pvp-selected' : ''}"
+                    data-id="${team.id}"
+                    onclick="selectPvpOpponent('${team.id}')">
+            <div class="pvp-team-header">
+                <span class="rarity-badge badge-${topRarity}">${topRarity}</span>
+                <strong class="pvp-team-name">${team.team_name}</strong>
+                <span class="pvp-owner">by ${team.owner_name}</span>
+            </div>
+            <div class="pvp-team-meta">
+                <span>⚡ Avg PPG: ${avgPpg}</span>
+                <span>📅 ${submitted}</span>
+                <span>📊 ${record}</span>
+            </div>
+            <div class="pvp-team-players">
+                ${players.map(p => `<span class="pvp-player-chip">${p.pos}: ${p.player}</span>`).join('')}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// Called when a user clicks a team card in the lobby
+window.selectPvpOpponent = function(teamId) {
+    // Re-fetch from the rendered data attributes rather than a second API call
+    const cards = document.querySelectorAll('.pvp-team-card');
+    cards.forEach(c => c.classList.remove('pvp-selected'));
+
+    const clicked = document.querySelector(`.pvp-team-card[data-id="${teamId}"]`);
+    if (clicked) clicked.classList.add('pvp-selected');
+
+    // Pull the team data from the already-loaded list
+    fetchPvpTeams().then(teams => {
+        selectedPvpOpponent = teams.find(t => t.id === teamId) || null;
+        document.getElementById('pvp-challenge-btn').disabled = !selectedPvpOpponent;
+        if (selectedPvpOpponent) {
+            document.getElementById('pvp-challenge-btn').innerText =
+                `⚔️ Challenge "${selectedPvpOpponent.team_name}"  (Win: 500 🪙)`;
+        }
+    });
+};
+
+// ── SUBMIT DEFENSIVE TEAM ────────────────────────────────────────────────────
+document.getElementById('pvp-submit-btn').addEventListener('click', async () => {
+    if (roster.length !== 5) return alert("You need exactly 5 players in your roster to submit a team!");
+
+    const teamName  = document.getElementById('pvp-team-name').value.trim();
+    const ownerName = document.getElementById('pvp-owner-name').value.trim();
+
+    if (!teamName)  return alert("Please give your team a name.");
+    if (!ownerName) return alert("Please enter your name so others know who to challenge.");
+
+    const btn = document.getElementById('pvp-submit-btn');
+    btn.disabled = true;
+    btn.innerText = 'Submitting...';
+
+    try {
+        await submitPvpTeam(teamName, ownerName, roster);
+        document.getElementById('pvp-team-name').value  = '';
+        document.getElementById('pvp-owner-name').value = '';
+        alert(`✅ "${teamName}" submitted! Your friends can now find and challenge it.`);
+        renderPvpLobby(); // Refresh the pool
+    } catch (err) {
+        alert(`Failed to submit team: ${err.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = '📤 Submit Team to Pool';
+    }
+});
+
+// ── CHALLENGE A TEAM ─────────────────────────────────────────────────────────
+document.getElementById('pvp-challenge-btn').addEventListener('click', async () => {
+    if (roster.length !== 5) return alert("You need exactly 5 players to play!");
+    if (!selectedPvpOpponent)  return alert("Select an opponent team first.");
+
+    const opponent = selectedPvpOpponent;
+    const results  = simulateGame("Your Team", roster, opponent.team_name, opponent.players);
+
+    // Record result against the opponent's team record (fire and forget)
+    const youWon = results.team1.score > results.team2.score;
+    recordPvpResult(opponent.id, youWon).catch(console.warn);
+
     animateGame(results, 500);
+});
+
+// Refresh lobby when navigating to the Play view
+document.getElementById('nav-play').addEventListener('click', () => {
+    renderPvpLobby();
+});
+
+// Manual refresh button
+document.getElementById('pvp-refresh-btn').addEventListener('click', () => {
+    selectedPvpOpponent = null;
+    document.getElementById('pvp-challenge-btn').disabled = true;
+    document.getElementById('pvp-challenge-btn').innerText = 'Select a team to challenge';
+    renderPvpLobby();
 });
 
 // --- ADD THIS TO YOUR HTML inside #view-live-game, between scoreboard and rosters:

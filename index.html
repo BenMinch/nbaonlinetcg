@@ -40,17 +40,48 @@
         <section id="view-play" class="view" style="display: none;">
             <h2>Simulate Match</h2>
             <p>Winning earns coins to buy more packs!</p>
-            
+
+            <!-- CPU GAMES -->
             <div class="difficulty-buttons">
                 <button class="sim-cpu-btn" data-diff="easy">Play Easy CPU (Win: 100 🪙)</button>
                 <button class="sim-cpu-btn" data-diff="medium">Play Medium CPU (Win: 200 🪙)</button>
                 <button class="sim-cpu-btn" data-diff="hard">Play Hard CPU (Win: 300 🪙)</button>
                 <button class="sim-cpu-btn" data-diff="pro">Play Pro CPU (Win: 500 🪙)</button>
-                <hr>
-                <button id="sim-pvp-btn">Play Async PvP (Win: 500 🪙)</button>
             </div>
 
             <div id="game-results"></div>
+
+            <!-- ASYNC PVP LOBBY -->
+            <div class="pvp-section">
+                <h2>⚔️ Async PvP</h2>
+                <p>Submit your current roster as a defensive team — anyone in the world can challenge it. Find a team below and take them on!</p>
+
+                <!-- Submit panel -->
+                <div class="pvp-submit-panel">
+                    <h3>📤 Submit Your Team</h3>
+                    <p style="font-size:0.9rem;color:#666;">Uses your current Starting Five roster as the defensive team others will face.</p>
+                    <div class="pvp-form">
+                        <input id="pvp-team-name"  type="text" placeholder="Team name (e.g. Ballers)" maxlength="30" />
+                        <input id="pvp-owner-name" type="text" placeholder="Your name (e.g. Jordan)" maxlength="20" />
+                        <button id="pvp-submit-btn" class="action-btn">📤 Submit Team to Pool</button>
+                    </div>
+                </div>
+
+                <!-- Live opponent pool -->
+                <div class="pvp-pool-panel">
+                    <h3>🌍 Global Team Pool</h3>
+                    <p style="font-size:0.9rem;color:#666;">Click a team to select them, then challenge them below.</p>
+                    <div id="pvp-lobby">
+                        <p style="color:#888;font-style:italic;">Loading teams...</p>
+                    </div>
+                    <div style="margin-top: 16px;">
+                        <button id="pvp-challenge-btn" class="action-btn" disabled>
+                            Select a team to challenge
+                        </button>
+                        <button id="pvp-refresh-btn" class="action-btn" style="background:#555;">🔄 Refresh Pool</button>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <section id="view-live-game" class="view" style="display: none;">
@@ -68,13 +99,7 @@
                     <div id="live-t2-score" class="score-number">0</div>
                 </div>
             </div>
-            <div id="live-quarter-line" style="
-                padding: 8px 12px;
-                background: rgba(255,255,255,0.04);
-                border-radius: 6px;
-                margin: 8px 0;
-                color: #ccc;
-            "></div>
+
             <div class="live-box-scores">
                 <div class="box-column">
                     <h4>Your Roster</h4>
