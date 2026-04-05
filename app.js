@@ -198,6 +198,8 @@ function getCPUOpponent(difficulty) {
 let pendingReward = 0;
 
 // The 30-second Game Animator
+// Replace your existing animateGame function in app.js with this one:
+
 function animateGame(results, rewardAmount) {
     document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
     document.getElementById('view-live-game').style.display = 'block';
@@ -208,31 +210,78 @@ function animateGame(results, rewardAmount) {
     
     pendingReward = rewardAmount;
 
+    const maxTicks = 300; // 30 seconds
     let ticks = 0;
-    const maxTicks = 300; 
-    
-    // Track the currently displayed scores
     let currentT1Score = 0;
     let currentT2Score = 0;
-    
+
+    // Determine who the predetermined winner is so we can hide their lead
+    const t1Wins = results.team1.score > results.team2.score;
+
+    // --- THE SECRET SAUCE: PACE CURVE GENERATOR ---
+    function generatePaceArray(isWinner) {
+        let paces = [0];
+        let currentVisualPace = 0;
+        let momentum = 1.0; // 1.0 is normal scoring speed
+        
+        for(let i=1; i<=maxTicks; i++) {
+            let timePercent = i / maxTicks;
+            
+            // Every 15-25 ticks, shift the momentum (Creates Runs and Droughts)
+            if (i % (Math.floor(Math.random() * 10) + 15) === 0) {
+                momentum = Math.random() * 2.0 + 0.1; // Range: 0.1 (ice cold) to 2.1 (on fire)
+                
+                // Rubber-banding: Keep the game incredibly close in the first 3 quarters
+                // to maximize suspense for the player.
+                if (timePercent < 0.75) {
+                    if (isWinner && Math.random() > 0.4) momentum *= 0.4; // Destined winner goes cold
+                    if (!isWinner && Math.random() > 0.4) momentum *= 1.6; // Destined loser goes on a run
+                }
+            }
+            
+            // In the 4th quarter, forcefully pull their momentum back to reality 
+            // so the visual math resolves perfectly to the final simulation score.
+            if (timePercent >= 0.75) {
+                let ticksLeft = maxTicks - i + 1;
+                let paceNeededToEnd = (maxTicks - currentVisualPace) / ticksLeft;
+                momentum = (momentum * 0.2) + (paceNeededToEnd * 0.8);
+            }
+            
+            currentVisualPace += momentum;
+            paces.push(currentVisualPace);
+        }
+        
+        // Normalize so the very last tick is exactly 1.0 (100% of the final score)
+        let finalVal = paces[maxTicks];
+        return paces.map(p => Math.max(0, p / finalVal));
+    }
+
+    // Generate the dramatic timelines before the visual playback starts
+    const t1PaceCurve = generatePaceArray(t1Wins);
+    const t2PaceCurve = generatePaceArray(!t1Wins);
+
+    // --- PLAYBACK ANIMATION ---
     const interval = setInterval(() => {
         ticks++;
-        let timePercent = ticks / maxTicks;
+        
+        // Pull the exact percentage completion from our secret drama curves
+        let p1 = t1PaceCurve[ticks];
+        let p2 = t2PaceCurve[ticks];
 
-        // Calculate where the score SHOULD be right now based on time
-        let expectedT1 = Math.floor(results.team1.score * timePercent);
-        let expectedT2 = Math.floor(results.team2.score * timePercent);
+        // Calculate exact expected scores at this millisecond
+        let expectedT1 = Math.floor(results.team1.score * p1);
+        let expectedT2 = Math.floor(results.team2.score * p2);
 
-        // Only update if the expected score is at least 1, 2, or 3 points higher 
-        // than the current score (mimicking real basketball shots)
-        if (expectedT1 - currentT1Score >= 2 || (expectedT1 > currentT1Score && Math.random() > 0.8)) {
+        // Stutter-step the score so it looks like basketball (jumping by 2s or 3s mostly)
+        // rather than rolling up linearly like a stopwatch.
+        if (expectedT1 - currentT1Score >= 2 || (expectedT1 > currentT1Score && Math.random() > 0.85)) {
             currentT1Score = expectedT1;
         }
-        if (expectedT2 - currentT2Score >= 2 || (expectedT2 > currentT2Score && Math.random() > 0.8)) {
+        if (expectedT2 - currentT2Score >= 2 || (expectedT2 > currentT2Score && Math.random() > 0.85)) {
             currentT2Score = expectedT2;
         }
 
-        // Force the final correct score on the very last tick
+        // Force exact final score at the buzzer to prevent rounding errors
         if (ticks >= maxTicks) {
             currentT1Score = results.team1.score;
             currentT2Score = results.team2.score;
@@ -241,22 +290,25 @@ function animateGame(results, rewardAmount) {
         document.getElementById('live-t1-score').innerText = currentT1Score;
         document.getElementById('live-t2-score').innerText = currentT2Score;
 
+        // Update Game Clock
+        let timePercent = ticks / maxTicks;
         let gameSecondsLeft = Math.max(0, 2880 - Math.floor(2880 * timePercent));
         let mins = Math.floor((gameSecondsLeft % 720) / 60);
         let secs = gameSecondsLeft % 60;
         document.getElementById('live-time').innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
         
+        // Update Quarter
         let qtr = 4 - Math.floor(gameSecondsLeft / 720);
         if (qtr === 5) qtr = 4;
         document.getElementById('live-quarter').innerText = ["1ST QTR", "2ND QTR", "HALF", "3RD QTR", "4TH QTR"][qtr];
 
-        const renderLiveRoster = (teamBox) => {
+        // Render Roster Stats matching the drama curve
+        const renderLiveRoster = (teamBox, paceMultiplier) => {
             return teamBox.map(p => {
-                // Ensure box score stats only increment upwards smoothly without jitter
-                let currentPts = Math.floor(p.pts * timePercent);
+                let currentPts = Math.floor(p.pts * paceMultiplier);
                 let fgParts = p.fg.split('-');
-                let currentFGM = Math.floor(parseInt(fgParts[0]) * timePercent);
-                let currentFGA = Math.floor(parseInt(fgParts[1]) * timePercent);
+                let currentFGM = Math.floor(parseInt(fgParts[0]) * paceMultiplier);
+                let currentFGA = Math.floor(parseInt(fgParts[1]) * paceMultiplier);
                 
                 return `<li>
                     <div><strong>${p.player}</strong> <span style="font-size:0.8rem; color:#888;">(${p.pos})</span></div>
@@ -268,9 +320,10 @@ function animateGame(results, rewardAmount) {
             }).join('');
         };
 
-        document.getElementById('live-t1-roster').innerHTML = renderLiveRoster(results.team1.boxScore);
-        document.getElementById('live-t2-roster').innerHTML = renderLiveRoster(results.team2.boxScore);
+        document.getElementById('live-t1-roster').innerHTML = renderLiveRoster(results.team1.boxScore, p1);
+        document.getElementById('live-t2-roster').innerHTML = renderLiveRoster(results.team2.boxScore, p2);
 
+        // End game check
         if (ticks >= maxTicks) {
             clearInterval(interval);
             
