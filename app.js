@@ -50,9 +50,7 @@ function updateUI() {
     const rosterContainer = document.getElementById('starting-five-list');
     const requiredPositions = ['PG', 'SG', 'SF', 'PF', 'C'];
     
-    // Draw the 5 explicit positional slots
     rosterContainer.innerHTML = requiredPositions.map(pos => {
-        // Find if we have a player in the roster for this specific position
         const playerInSlot = roster.find(p => (p.pos || 'SF') === pos);
         
         if (playerInSlot) {
@@ -94,22 +92,46 @@ function pullCard() {
         }
     }
 
-    const pool = db.filter(p => p.Rarity === pulledRarity);
-    if (pool.length === 0) return db[Math.floor(Math.random() * db.length)];
+    // Build a pool of cards at this rarity that the player does NOT already own.
+    // Falls back to the full rarity pool if they own everything at that tier,
+    // and further falls back to any unowned card if the DB is tiny.
+    const owned = new Set(collection.map(p => p.player));
+    let pool = db.filter(p => p.Rarity === pulledRarity && !owned.has(p.player));
+    if (pool.length === 0) pool = db.filter(p => !owned.has(p.player));
+    if (pool.length === 0) return null; // Player owns every card in the DB
+
     return pool[Math.floor(Math.random() * pool.length)];
 }
 
 document.getElementById('open-pack-btn').addEventListener('click', () => {
     if (coins < PACK_COST) return alert("Not enough coins! Go win some games.");
-    
+
     coins -= PACK_COST;
     const display = document.getElementById('new-cards-display');
     display.innerHTML = '';
-    
-    for(let i=0; i < CARDS_PER_PACK; i++) {
+
+    let newCardsThisPack = 0;
+    let coinsRefunded = 0;
+
+    for (let i = 0; i < CARDS_PER_PACK; i++) {
         const pulledPlayer = pullCard();
+
+        // null means the player owns every card — refund the slot cost and skip
+        if (!pulledPlayer) {
+            const slotRefund = Math.round(PACK_COST / CARDS_PER_PACK);
+            coinsRefunded += slotRefund;
+            display.innerHTML += `
+                <div class="card rarity-C" style="opacity:0.4;text-align:center;">
+                    <em>Collection Complete!</em><br>
+                    <span style="font-size:0.8em;">+${slotRefund} 🪙 refunded</span>
+                </div>`;
+            continue;
+        }
+
+        // Safe to add — guaranteed unique at this point
         collection.push(pulledPlayer);
-        
+        newCardsThisPack++;
+
         const safeRarity = pulledPlayer.Rarity || 'C';
         display.innerHTML += `
             <div class="card rarity-${safeRarity}">
@@ -119,7 +141,10 @@ document.getElementById('open-pack-btn').addEventListener('click', () => {
                 PPG: ${pulledPlayer.PPG || 0}
             </div>`;
     }
-    
+
+    // Apply any refunds for completed collection slots
+    if (coinsRefunded > 0) coins += coinsRefunded;
+
     saveState();
     renderCollection();
 });
@@ -128,15 +153,13 @@ document.getElementById('open-pack-btn').addEventListener('click', () => {
 function renderCollection() {
     const grid = document.getElementById('collection-grid');
     grid.innerHTML = '';
-    
-    // Display only unique cards to prevent UI clutter
-    const uniqueCards = [...new Map(collection.map(item => [item.player, item])).values()];
-    
-    // Sort by rarity roughly (LR first, C last) for better visual organization
+
+    // collection is guaranteed unique at the source (pullCard enforces this),
+    // so no deduplication needed here — just sort and render.
     const rarityOrder = { 'LR': 7, 'UR': 6, 'SSR': 5, 'SR': 4, 'R': 3, 'UC': 2, 'C': 1 };
-    uniqueCards.sort((a, b) => (rarityOrder[b.Rarity||'C'] || 0) - (rarityOrder[a.Rarity||'C'] || 0));
-    
-    uniqueCards.forEach(p => {
+    const sorted = [...collection].sort((a, b) => (rarityOrder[b.Rarity||'C'] || 0) - (rarityOrder[a.Rarity||'C'] || 0));
+
+    sorted.forEach(p => {
         const div = document.createElement('div');
         const safeRarity = p.Rarity || 'C';
         
@@ -149,20 +172,17 @@ function renderCollection() {
         
         div.onclick = () => {
             const existingPlayerIndex = roster.findIndex(r => r.player === p.player);
-            const cardPosition = p.pos || 'SF'; // Default to SF if the database is missing a position
+            const cardPosition = p.pos || 'SF';
 
             if (existingPlayerIndex > -1) {
-                // If they are already in the roster, clicking removes them
                 roster.splice(existingPlayerIndex, 1);
             } else {
-                // Check if we already have a player at this position
                 const isPositionFilled = roster.some(r => (r.pos || 'SF') === cardPosition);
                 
                 if (isPositionFilled) {
                     return alert(`You already have a ${cardPosition} in your starting lineup! Remove them first.`);
                 }
                 
-                // Safe to add
                 roster.push(p);
             }
             
@@ -176,15 +196,15 @@ function renderCollection() {
 // --- SIMULATION & CPU MATCHMAKING ---
 function getPlayersByRarity(rarity, count) {
     let pool = db.filter(p => p.Rarity === rarity);
-    if (pool.length === 0) pool = db; // Failsafe just in case you haven't assigned this rarity yet
+    if (pool.length === 0) pool = db;
     let selection = [];
     for(let i=0; i<count; i++) {
         selection.push(pool[Math.floor(Math.random() * pool.length)]);
     }
     return selection;
 }
+
 function getCPUOpponent(difficulty) {
-    // New Rarity-based matchmaking rules
     if (difficulty === 'easy') return getPlayersByRarity('UC', 5);
     if (difficulty === 'medium') return getPlayersByRarity('SR', 5);
     if (difficulty === 'hard') {
@@ -193,157 +213,366 @@ function getCPUOpponent(difficulty) {
     if (difficulty === 'pro') {
         return [...getPlayersByRarity('UR', 3), ...getPlayersByRarity('LR', 2)];
     }
-    return getPlayersByRarity('C', 5); // Fallback
+    return getPlayersByRarity('C', 5);
 }
+
 let pendingReward = 0;
 
-// The 30-second Game Animator
-// Replace your existing animateGame function in app.js with this one:
-
+// =============================================================================
+// ANIMATE GAME — Realistic quarter-by-quarter scoreboard with discrete events
+// =============================================================================
 function animateGame(results, rewardAmount) {
     document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
     document.getElementById('view-live-game').style.display = 'block';
-    
     document.getElementById('post-game-panel').style.display = 'none';
     document.getElementById('live-t1-name').innerText = results.team1.name;
     document.getElementById('live-t2-name').innerText = results.team2.name;
-    
+
     pendingReward = rewardAmount;
 
-    const maxTicks = 300; // 30 seconds
-    let ticks = 0;
-    let currentT1Score = 0;
-    let currentT2Score = 0;
-
-    // Determine who the predetermined winner is so we can hide their lead
-    const t1Wins = results.team1.score > results.team2.score;
-
-    // --- THE SECRET SAUCE: PACE CURVE GENERATOR ---
-    function generatePaceArray(isWinner) {
-        let paces = [0];
-        let currentVisualPace = 0;
-        let momentum = 1.0; // 1.0 is normal scoring speed
-        
-        for(let i=1; i<=maxTicks; i++) {
-            let timePercent = i / maxTicks;
-            
-            // Every 15-25 ticks, shift the momentum (Creates Runs and Droughts)
-            if (i % (Math.floor(Math.random() * 10) + 15) === 0) {
-                momentum = Math.random() * 2.0 + 0.1; // Range: 0.1 (ice cold) to 2.1 (on fire)
-                
-                // Rubber-banding: Keep the game incredibly close in the first 3 quarters
-                // to maximize suspense for the player.
-                if (timePercent < 0.75) {
-                    if (isWinner && Math.random() > 0.4) momentum *= 0.4; // Destined winner goes cold
-                    if (!isWinner && Math.random() > 0.4) momentum *= 1.6; // Destined loser goes on a run
-                }
-            }
-            
-            // In the 4th quarter, forcefully pull their momentum back to reality 
-            // so the visual math resolves perfectly to the final simulation score.
-            if (timePercent >= 0.75) {
-                let ticksLeft = maxTicks - i + 1;
-                let paceNeededToEnd = (maxTicks - currentVisualPace) / ticksLeft;
-                momentum = (momentum * 0.2) + (paceNeededToEnd * 0.8);
-            }
-            
-            currentVisualPace += momentum;
-            paces.push(currentVisualPace);
+    // ── QUARTER BREAKDOWN ENGINE ─────────────────────────────────────────────
+    // Split each team's final score into realistic per-quarter totals.
+    // OT periods get ~35% the weight of a full quarter.
+    function splitIntoQuarters(totalScore, numPeriods) {
+        let weights = [];
+        for (let i = 0; i < numPeriods; i++) {
+            const isOT = i >= 4;
+            weights.push(Math.max(0.3, (Math.random() * 0.6) + (isOT ? 0.2 : 0.7)));
         }
-        
-        // Normalize so the very last tick is exactly 1.0 (100% of the final score)
-        let finalVal = paces[maxTicks];
-        return paces.map(p => Math.max(0, p / finalVal));
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+        let periods = weights.map(w => Math.round((w / totalWeight) * totalScore));
+
+        // Fix rounding drift so sum exactly equals totalScore
+        const drift = totalScore - periods.reduce((a, b) => a + b, 0);
+        periods[periods.length - 1] += drift;
+        return periods;
     }
 
-    // Generate the dramatic timelines before the visual playback starts
-    const t1PaceCurve = generatePaceArray(t1Wins);
-    const t2PaceCurve = generatePaceArray(!t1Wins);
+    // ── SCORING EVENT BUILDER ────────────────────────────────────────────────
+    // Convert each quarter's point total into discrete scoring plays
+    // (2PT, 3PT, and-1s, FTs) that fire at random moments within that quarter.
+    function buildScoringEvents(quarterScores) {
+        let events = [];
+        const totalTicks = 2880; // 48 min × 60 sec
 
-    // --- PLAYBACK ANIMATION ---
+        quarterScores.forEach((qScore, qIdx) => {
+            const qStart = qIdx * 720;
+            const qEnd   = qStart + 720;
+            let remaining = qScore;
+
+            while (remaining > 0) {
+                let roll = Math.random();
+                let pts, type;
+                if (remaining >= 3 && roll < 0.28)      { pts = 3; type = '3PT';  }
+                else if (remaining >= 3 && roll < 0.35) { pts = 3; type = 'AND1'; }
+                else if (remaining >= 2 && roll < 0.90) { pts = 2; type = '2PT';  }
+                else if (remaining >= 1)                 { pts = 1; type = 'FT';   }
+                else break;
+
+                pts = Math.min(pts, remaining);
+                const tick = Math.floor(qStart + Math.random() * (qEnd - qStart));
+                events.push({ tick, points: pts, type, quarter: qIdx + 1 });
+                remaining -= pts;
+            }
+        });
+
+        events.sort((a, b) => a.tick - b.tick);
+        return events;
+    }
+
+    // ── SETUP ────────────────────────────────────────────────────────────────
+    const numPeriods = 4 + (results.overtimePeriods || 0);
+
+    const t1Quarters = splitIntoQuarters(results.team1.score, numPeriods);
+    const t2Quarters = splitIntoQuarters(results.team2.score, numPeriods);
+
+    const t1Events = buildScoringEvents(t1Quarters);
+    const t2Events = buildScoringEvents(t2Quarters);
+
+    // Running per-quarter score totals (updated live)
+    const t1QtrRunning = new Array(numPeriods).fill(0);
+    const t2QtrRunning = new Array(numPeriods).fill(0);
+
+    // ── PLAYER STAT TIMELINE ─────────────────────────────────────────────────
+    // Each player gets a "hot quarter" where more of their stats land,
+    // creating natural star performances rather than linear growth.
+    function buildPlayerTimeline(boxScore) {
+        return boxScore.map(player => {
+            const hotQtr = Math.floor(Math.random() * 4);
+            const qWeights = [0, 1, 2, 3].map(q => {
+                let w = 0.2 + Math.random() * 0.15;
+                if (q === hotQtr) w += 0.25;
+                return w;
+            });
+            const wSum = qWeights.reduce((a, b) => a + b, 0);
+            const qNorm = qWeights.map(w => w / wSum);
+
+            // Cumulative % of stats completed after each quarter
+            const cumPct = qNorm.reduce((acc, w, i) => {
+                acc.push((acc[i - 1] || 0) + w);
+                return acc;
+            }, []);
+
+            return { ...player, cumPct };
+        });
+    }
+
+    const t1Timeline = buildPlayerTimeline(results.team1.boxScore);
+    const t2Timeline = buildPlayerTimeline(results.team2.boxScore);
+
+    // ── MOMENTUM / RUN DETECTION ─────────────────────────────────────────────
+    let recentEvents = [];
+    let runBannerTimeout = null;
+
+    function checkForRun(team, pts) {
+        recentEvents.push({ team, pts });
+        if (recentEvents.length > 12) recentEvents.shift();
+
+        const window = recentEvents.slice(-8);
+        const t1Run = window.filter(e => e.team === 't1').reduce((s, e) => s + e.pts, 0);
+        const t2Run = window.filter(e => e.team === 't2').reduce((s, e) => s + e.pts, 0);
+
+        let runMsg = null;
+        if (t1Run >= 8 && t2Run === 0)  runMsg = `🔥 ${results.team1.name} on a ${t1Run}-0 RUN!`;
+        if (t2Run >= 8 && t1Run === 0)  runMsg = `🔥 ${results.team2.name} on a ${t2Run}-0 RUN!`;
+        if (t1Run >= 10 && t2Run > 0)   runMsg = `💥 ${results.team1.name} on a ${t1Run}-${t2Run} RUN!`;
+        if (t2Run >= 10 && t1Run > 0)   runMsg = `💥 ${results.team2.name} on a ${t2Run}-${t1Run} RUN!`;
+
+        if (runMsg) flashBanner(runMsg);
+    }
+
+    function flashBanner(msg) {
+        let banner = document.getElementById('run-banner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'run-banner';
+            banner.style.cssText = `
+                position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+                background: #ff6b00; color: #fff; font-weight: 900; font-size: 1rem;
+                padding: 8px 20px; border-radius: 6px; z-index: 9999;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+                transition: opacity 0.5s;
+                pointer-events: none;
+            `;
+            document.body.appendChild(banner);
+        }
+        banner.innerText = msg;
+        banner.style.opacity = '1';
+        clearTimeout(runBannerTimeout);
+        runBannerTimeout = setTimeout(() => { banner.style.opacity = '0'; }, 2800);
+    }
+
+    // ── TICK → EVENT INDEX MAPPING ───────────────────────────────────────────
+    const GAME_SECONDS = 2880;
+    const TICK_MS      = 100;
+    const TOTAL_TICKS  = 300;
+
+    function mapEventToTick(event) {
+        return Math.floor((event.tick / GAME_SECONDS) * TOTAL_TICKS);
+    }
+
+    const t1EventQueue = {};
+    const t2EventQueue = {};
+    t1Events.forEach(e => {
+        const t = mapEventToTick(e);
+        if (!t1EventQueue[t]) t1EventQueue[t] = [];
+        t1EventQueue[t].push(e);
+    });
+    t2Events.forEach(e => {
+        const t = mapEventToTick(e);
+        if (!t2EventQueue[t]) t2EventQueue[t] = [];
+        t2EventQueue[t].push(e);
+    });
+
+    // ── QUARTER SCORELINE RENDERER ───────────────────────────────────────────
+    function renderQuarterScoreline() {
+        const el = document.getElementById('live-quarter-line');
+        if (!el) return;
+
+        const labels = ['Q1', 'Q2', 'Q3', 'Q4'];
+        for (let i = 4; i < numPeriods; i++) labels.push(`OT${i - 3}`);
+
+        const gameSecElapsed = Math.floor((ticks / TOTAL_TICKS) * GAME_SECONDS);
+        const currentQtr = Math.min(numPeriods - 1, Math.floor(gameSecElapsed / 720));
+
+        const el1 = results.team1.name.split(' ').pop();
+        const el2 = results.team2.name.split(' ').pop();
+
+        el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.78rem;text-align:center;">
+            <tr style="color:#888;">
+                <th style="text-align:left;padding:2px 4px;">Team</th>
+                ${labels.map((l, i) => `<th style="padding:2px 6px;${i === currentQtr ? 'color:#ff6b00;' : ''}">${l}</th>`).join('')}
+                <th style="padding:2px 6px;font-weight:900;">TOT</th>
+            </tr>
+            <tr>
+                <td style="text-align:left;padding:2px 4px;font-weight:700;">${el1}</td>
+                ${t1QtrRunning.map((s, i) => `<td style="padding:2px 6px;${i === currentQtr ? 'color:#ff6b00;font-weight:700;' : ''}">${i <= currentQtr ? s : '-'}</td>`).join('')}
+                <td style="padding:2px 6px;font-weight:900;">${currentT1Score}</td>
+            </tr>
+            <tr>
+                <td style="text-align:left;padding:2px 4px;font-weight:700;">${el2}</td>
+                ${t2QtrRunning.map((s, i) => `<td style="padding:2px 6px;${i === currentQtr ? 'color:#ff6b00;font-weight:700;' : ''}">${i <= currentQtr ? s : '-'}</td>`).join('')}
+                <td style="padding:2px 6px;font-weight:900;">${currentT2Score}</td>
+            </tr>
+        </table>`;
+    }
+
+    // ── LIVE BOX SCORE RENDERER ──────────────────────────────────────────────
+    function renderLiveBoxScore(timeline, containerId, paceRatio) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+
+        const qtrIndex = Math.min(numPeriods - 1, Math.floor(paceRatio * numPeriods));
+
+        el.innerHTML = timeline.map(player => {
+            const pct     = player.cumPct[Math.min(qtrIndex, player.cumPct.length - 1)];
+            const prevPct = qtrIndex > 0 ? player.cumPct[qtrIndex - 1] : 0;
+            const qtrProgress = (paceRatio * numPeriods) - qtrIndex;
+            const interpolated = prevPct + (pct - prevPct) * qtrProgress;
+            const ratio = Math.max(0, Math.min(1, interpolated));
+
+            const livePts = Math.floor(player.pts * ratio);
+            const liveAst = Math.floor((player.ast || 0) * ratio);
+            const liveReb = Math.floor((player.reb || 0) * ratio);
+            const liveTov = Math.floor((player.tov || 0) * ratio);
+
+            const fgParts  = player.fg.split('-');
+            const liveFGM  = Math.floor(parseInt(fgParts[0] || 0) * ratio);
+            const liveFGA  = Math.floor(parseInt(fgParts[1] || 0) * ratio);
+            const fg3Parts = player.fg3.split('-');
+            const live3M   = Math.floor(parseInt(fg3Parts[0] || 0) * ratio);
+            const live3A   = Math.floor(parseInt(fg3Parts[1] || 0) * ratio);
+
+            const isHot   = player.gameForm && player.gameForm >= 1.10;
+            const isCold  = player.gameForm && player.gameForm <= 0.88;
+            const formDot = isHot ? ' 🔥' : (isCold ? ' 🧊' : '');
+            const fouledNote = player.fouledOut
+                ? ' <span style="color:#e55;font-size:0.72rem;">FOULED OUT</span>'
+                : '';
+
+            return `<li style="
+                display:flex;justify-content:space-between;align-items:flex-start;
+                padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);gap:8px;
+            ">
+                <div style="flex:1;min-width:0;">
+                    <strong style="font-size:0.88rem;">${player.player}${formDot}</strong>${fouledNote}
+                    <span style="font-size:0.74rem;color:#888;margin-left:4px;">${player.pos}</span><br>
+                    <span style="font-size:0.74rem;color:#666;">
+                        FG ${liveFGM}/${liveFGA} &nbsp;|&nbsp; 3P ${live3M}/${live3A}
+                    </span>
+                </div>
+                <div style="text-align:right;white-space:nowrap;">
+                    <span style="font-size:1.05rem;font-weight:900;color:#f0f0f0;">${livePts}</span>
+                    <span style="font-size:0.7rem;color:#888;"> PTS</span><br>
+                    <span style="font-size:0.72rem;color:#777;">
+                        ${liveReb}R &nbsp;${liveAst}A &nbsp;${liveTov}TO
+                    </span>
+                </div>
+            </li>`;
+        }).join('');
+    }
+
+    // ── SCORE FLASH ANIMATION ────────────────────────────────────────────────
+    function flashScore(elId) {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        el.style.transition = 'color 0.1s, transform 0.1s';
+        el.style.color = '#ff6b00';
+        el.style.transform = 'scale(1.18)';
+        setTimeout(() => {
+            el.style.color = '';
+            el.style.transform = '';
+        }, 350);
+    }
+
+    // ── PLAYBACK STATE ───────────────────────────────────────────────────────
+    let ticks          = 0;
+    let currentT1Score = 0;
+    let currentT2Score = 0;
+    let lastT1Score    = 0;
+    let lastT2Score    = 0;
+
+    // ── MAIN TICK LOOP ───────────────────────────────────────────────────────
     const interval = setInterval(() => {
         ticks++;
-        
-        // Pull the exact percentage completion from our secret drama curves
-        let p1 = t1PaceCurve[ticks];
-        let p2 = t2PaceCurve[ticks];
 
-        // Calculate exact expected scores at this millisecond
-        let expectedT1 = Math.floor(results.team1.score * p1);
-        let expectedT2 = Math.floor(results.team2.score * p2);
+        // Fire all scoring events that land on this tick
+        (t1EventQueue[ticks] || []).forEach(e => {
+            currentT1Score += e.points;
+            const qtr = Math.min(e.quarter - 1, numPeriods - 1);
+            t1QtrRunning[qtr] = (t1QtrRunning[qtr] || 0) + e.points;
+            checkForRun('t1', e.points);
+        });
+        (t2EventQueue[ticks] || []).forEach(e => {
+            currentT2Score += e.points;
+            const qtr = Math.min(e.quarter - 1, numPeriods - 1);
+            t2QtrRunning[qtr] = (t2QtrRunning[qtr] || 0) + e.points;
+            checkForRun('t2', e.points);
+        });
 
-        // Stutter-step the score so it looks like basketball (jumping by 2s or 3s mostly)
-        // rather than rolling up linearly like a stopwatch.
-        if (expectedT1 - currentT1Score >= 2 || (expectedT1 > currentT1Score && Math.random() > 0.85)) {
-            currentT1Score = expectedT1;
-        }
-        if (expectedT2 - currentT2Score >= 2 || (expectedT2 > currentT2Score && Math.random() > 0.85)) {
-            currentT2Score = expectedT2;
-        }
+        // Flash score display on change
+        if (currentT1Score !== lastT1Score) { flashScore('live-t1-score'); lastT1Score = currentT1Score; }
+        if (currentT2Score !== lastT2Score) { flashScore('live-t2-score'); lastT2Score = currentT2Score; }
 
-        // Force exact final score at the buzzer to prevent rounding errors
-        if (ticks >= maxTicks) {
+        // Force exact totals at final buzzer
+        if (ticks >= TOTAL_TICKS) {
             currentT1Score = results.team1.score;
             currentT2Score = results.team2.score;
         }
 
+        // Update scoreboard
         document.getElementById('live-t1-score').innerText = currentT1Score;
         document.getElementById('live-t2-score').innerText = currentT2Score;
 
-        // Update Game Clock
-        let timePercent = ticks / maxTicks;
-        let gameSecondsLeft = Math.max(0, 2880 - Math.floor(2880 * timePercent));
-        let mins = Math.floor((gameSecondsLeft % 720) / 60);
-        let secs = gameSecondsLeft % 60;
+        // Update game clock
+        const timePercent     = ticks / TOTAL_TICKS;
+        const gameSecondsLeft = Math.max(0, GAME_SECONDS - Math.floor(GAME_SECONDS * timePercent));
+        const periodSeconds   = gameSecondsLeft % 720;
+        const mins = Math.floor(periodSeconds / 60);
+        const secs = periodSeconds % 60;
         document.getElementById('live-time').innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
-        
-        // Update Quarter
-        let qtr = 4 - Math.floor(gameSecondsLeft / 720);
-        if (qtr === 5) qtr = 4;
-        document.getElementById('live-quarter').innerText = ["1ST QTR", "2ND QTR", "HALF", "3RD QTR", "4TH QTR"][qtr];
 
-        // Render Roster Stats matching the drama curve
-        const renderLiveRoster = (teamBox, paceMultiplier) => {
-            return teamBox.map(p => {
-                let currentPts = Math.floor(p.pts * paceMultiplier);
-                let fgParts = p.fg.split('-');
-                let currentFGM = Math.floor(parseInt(fgParts[0]) * paceMultiplier);
-                let currentFGA = Math.floor(parseInt(fgParts[1]) * paceMultiplier);
-                
-                return `<li>
-                    <div><strong>${p.player}</strong> <span style="font-size:0.8rem; color:#888;">(${p.pos})</span></div>
-                    <div style="text-align: right;">
-                        <span class="live-stat-pts">${currentPts} PTS</span><br>
-                        <span style="font-size:0.8rem; color:#666;">FG: ${currentFGM}-${currentFGA}</span>
-                    </div>
-                </li>`;
-            }).join('');
-        };
+        // Update quarter label
+        const periodIndex   = numPeriods - 1 - Math.floor(gameSecondsLeft / 720);
+        const clampedPeriod = Math.min(Math.max(periodIndex, 0), numPeriods - 1);
+        const qtrLabels = ['1ST', '2ND', '3RD', '4TH'];
+        for (let i = 4; i < numPeriods; i++) qtrLabels.push(`OT${i - 3}`);
+        document.getElementById('live-quarter').innerText = `${qtrLabels[clampedPeriod]} QTR`;
 
-        document.getElementById('live-t1-roster').innerHTML = renderLiveRoster(results.team1.boxScore, p1);
-        document.getElementById('live-t2-roster').innerHTML = renderLiveRoster(results.team2.boxScore, p2);
+        // Render quarter scoreline table
+        renderQuarterScoreline();
 
-        // End game check
-        if (ticks >= maxTicks) {
+        // Render live box scores
+        renderLiveBoxScore(t1Timeline, 'live-t1-roster', timePercent);
+        renderLiveBoxScore(t2Timeline, 'live-t2-roster', timePercent);
+
+        // ── END GAME ─────────────────────────────────────────────────────────
+        if (ticks >= TOTAL_TICKS) {
             clearInterval(interval);
-            
+
             const msgObj = document.getElementById('post-game-message');
             if (results.team1.score > results.team2.score) {
                 msgObj.innerText = `YOU WIN! Earned ${pendingReward} 🪙`;
-                msgObj.style.color = "green";
+                msgObj.style.color = 'green';
                 coins += pendingReward;
                 saveState();
             } else {
                 msgObj.innerText = `YOU LOSE! No coins earned.`;
-                msgObj.style.color = "red";
+                msgObj.style.color = 'red';
             }
-            
+
+            if (results.overtimePeriods > 0) {
+                flashBanner(`FINAL — ${results.overtimePeriods > 1 ? results.overtimePeriods + 'x ' : ''}OVERTIME!`);
+            }
+
             document.getElementById('post-game-panel').style.display = 'block';
         }
-    }, 100);
+
+    }, TICK_MS);
 }
 
-// Button Listeners for CPU match
+// --- CPU GAME BUTTON LISTENERS ---
+// NOTE: Only one listener set is needed — the duplicate below has been removed.
 document.querySelectorAll('.sim-cpu-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         if (roster.length !== 5) return alert("You need exactly 5 players to play!");
@@ -352,19 +581,18 @@ document.querySelectorAll('.sim-cpu-btn').forEach(btn => {
         const cpuTeam = getCPUOpponent(difficulty);
         const rewards = { 'easy': 100, 'medium': 200, 'hard': 300, 'pro': 500 };
         
-        // 1. Calculate the math instantly behind the scenes
         const results = simulateGame("Your Team", roster, `CPU (${difficulty.toUpperCase()})`, cpuTeam);
-        
-        // 2. Play out the theater
         animateGame(results, rewards[difficulty]);
     });
 });
 
-// Post-Game Return Button
+// --- POST-GAME RETURN BUTTON ---
 document.getElementById('claim-rewards-btn').addEventListener('click', () => {
     document.getElementById('view-live-game').style.display = 'none';
-    document.getElementById('view-play').style.display = 'block'; // Return to menu
+    document.getElementById('view-play').style.display = 'block';
 });
+
+// --- PROCESS GAME RESULT (used by PvP fallback) ---
 function processGameResult(results, rewardAmount) {
     let resultHTML = `<h3>FINAL SCORE</h3>
         <p>${results.team1.name}: ${results.team1.score}</p>
@@ -378,34 +606,32 @@ function processGameResult(results, rewardAmount) {
         resultHTML += `<h3 style="color:red">YOU LOSE! No coins earned.</h3>`;
     }
 
-    resultHTML += `<h4>Your Box Score</h4><pre>${results.team1.boxScore.map(p => `${p.player.padEnd(20)} | PTS: ${p.pts.toString().padStart(2)} | FG: ${p.fg}`).join('\n')}</pre>`;
+    resultHTML += `<h4>Your Box Score</h4><pre>${results.team1.boxScore.map(p =>
+        `${p.player.padEnd(20)} | PTS: ${p.pts.toString().padStart(2)} | FG: ${p.fg} | REB: ${(p.reb||0)} | AST: ${(p.ast||0)} | TO: ${(p.tov||0)}`
+    ).join('\n')}</pre>`;
     document.getElementById('game-results').innerHTML = resultHTML;
 }
 
-document.querySelectorAll('.sim-cpu-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        if (roster.length !== 5) return alert("You need exactly 5 players to play!");
-        
-        const difficulty = e.target.getAttribute('data-diff');
-        const cpuTeam = getCPUOpponent(difficulty);
-        const rewards = { 'easy': 100, 'medium': 200, 'hard': 300, 'pro': 500 };
-        
-        const results = simulateGame("Your Team", roster, `CPU (${difficulty.toUpperCase()})`, cpuTeam);
-        processGameResult(results, rewards[difficulty]);
-    });
-});
-
-// --- ASYNC PVP MATCHMAKING (Mock) ---
+// --- PVP MATCHMAKING (Mock) ---
 document.getElementById('sim-pvp-btn').addEventListener('click', () => {
     if (roster.length !== 5) return alert("You need exactly 5 players to play PvP!");
     
-    // In a real app, you would fetch this from Firebase/Supabase
-    // For now, we simulate a random "Opponent" by grabbing 5 high-tier randoms
     let mockOpponentTeam = [];
     for(let i=0; i<5; i++) mockOpponentTeam.push(db[Math.floor(Math.random() * 80)]);
     
     const results = simulateGame("Your Team", roster, "Rival Player", mockOpponentTeam);
-    processGameResult(results, 500); // 500 coins for a PvP win
+
+    // PvP uses the full animated scoreboard too
+    animateGame(results, 500);
 });
+
+// --- ADD THIS TO YOUR HTML inside #view-live-game, between scoreboard and rosters:
+// <div id="live-quarter-line" style="
+//     padding: 8px 12px;
+//     background: rgba(255,255,255,0.04);
+//     border-radius: 6px;
+//     margin: 8px 0;
+//     color: #ccc;
+// "></div>
 
 init();
